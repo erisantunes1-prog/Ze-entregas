@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organizador de Rotas - Zé Delivery</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: white;
+    text-align: center;
+    padding: 20px;
+}
+
+textarea {
+    width: 90%;
+    height: 150px;
+    margin: 10px 0;
+    border-radius: 10px;
+    padding: 10px;
+}
+
+button {
+    padding: 12px 20px;
+    margin: 8px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.btn { background: #00c853; color: white; }
+.btn2 { background: #2962ff; color: white; }
+.mic { background: #ff1744; color: white; }
+.next { background: #ff9100; color: white; }
+
+.result {
+    margin-top: 20px;
+    word-break: break-all;
+}
+
+.entrega-item {
+    background: #222;
+    padding: 8px;
+    margin: 5px;
+    border-radius: 8px;
+}
+.concluida {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🚚 Organizador de Rotas - Zé Delivery</h1>
+
+<p>Cole os endereços (um por linha) ou use o microfone:</p>
+
+<textarea id="enderecos" placeholder="Ex:
+Rua A, 123 - Campinas
+Rua B, 456 - Campinas
+Rua C, 789 - Campinas"></textarea>
+
+<br>
+
+<button class="btn" onclick="gerarRota()">Gerar Rota Google Maps</button>
+<button class="btn2" onclick="abrirWazeUltimo()">Abrir Último no Waze</button>
+<button class="next" onclick="proximaEntrega()">Próxima Entrega</button>
+<button onclick="otimizarOrdem()" style="background:#aa00ff;color:white;">Otimizar Ordem</button>
+<button class="mic" onclick="ativarMicrofone()">🎤 Falar Endereço</button>
+<button onclick="limpar()">Limpar</button>
+
+<div class="result" id="resultado"></div>
+<div id="listaEntregas"></div>
+<div id="painelExtra" style="margin-top:20px;"></div>
+
+<script>
+let minhaLocalizacao = null;
+let listaGlobal = [];
+let indiceAtual = 0;
+
+// 📍 Pega localização
+window.onload = function() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            minhaLocalizacao = position.coords.latitude + "," + position.coords.longitude;
+        });
+    }
+};
+
+// 🎤 Microfone
+function ativarMicrofone() {
+    if (!('webkitSpeechRecognition' in window)) {
+        alert("Seu navegador não suporta reconhecimento de voz.");
+        return;
+    }
+
+    let recognition = new webkitSpeechRecognition();
+    recognition.lang = "pt-BR";
+    recognition.start();
+
+    recognition.onresult = function(event) {
+        let textoFalado = event.results[0][0].transcript;
+        let campo = document.getElementById("enderecos");
+        campo.value += (campo.value ? "\n" : "") + textoFalado;
+    };
+}
+
+// 🚚 Gerar rota Google Maps
+function gerarRota() {
+    let texto = document.getElementById("enderecos").value.trim();
+
+    if (!texto) {
+        alert("Digite os endereços primeiro!");
+        return;
+    }
+
+    listaGlobal = texto.split("\n");
+    indiceAtual = 0;
+
+    let origem = minhaLocalizacao ? minhaLocalizacao : listaGlobal[0];
+    let destino = listaGlobal[listaGlobal.length - 1];
+    let waypoints = listaGlobal.slice(0, listaGlobal.length - 1).join("|");
+
+    let link = "https://www.google.com/maps/dir/?api=1" +
+               "&origin=" + encodeURIComponent(origem) +
+               "&destination=" + encodeURIComponent(destino) +
+               "&waypoints=" + encodeURIComponent(waypoints);
+
+    document.getElementById("resultado").innerHTML =
+        "<p><b>Google Maps:</b></p><a href='" + link + "' target='_blank'>" + link + "</a>";
+
+    mostrarLista();
+    atualizarPainel();
+}
+
+// 📍 Abrir último no Waze
+function abrirWazeUltimo() {
+    if (listaGlobal.length === 0) return;
+
+    let destino = listaGlobal[listaGlobal.length - 1];
+    let link = "https://www.waze.com/ul?q=" + encodeURIComponent(destino) + "&navigate=yes";
+
+    window.open(link, "_blank");
+}
+
+// 🚚 Próxima entrega
+function proximaEntrega() {
+    if (listaGlobal.length === 0) return;
+
+    if (indiceAtual >= listaGlobal.length) {
+        alert("Todas as entregas concluídas!");
+        return;
+    }
+
+    let destino = listaGlobal[indiceAtual];
+    let link = "https://www.waze.com/ul?q=" + encodeURIComponent(destino) + "&navigate=yes";
+
+    marcarConcluida(indiceAtual);
+    indiceAtual++;
+
+    window.open(link, "_blank");
+}
+
+// 📋 Mostrar lista
+function mostrarLista() {
+    let container = document.getElementById("listaEntregas");
+    container.innerHTML = "<h3>📦 Entregas:</h3>";
+
+    listaGlobal.forEach((endereco, index) => {
+        container.innerHTML +=
+            "<div class='entrega-item' id='item-" + index + "'>" +
+            (index + 1) + " - " + endereco +
+            "</div>";
+    });
+}
+
+// ✅ Marcar concluída
+function marcarConcluida(index) {
+    let item = document.getElementById("item-" + index);
+    if (item) {
+        item.classList.add("concluida");
+    }
+}
+
+// 📊 Painel extra
+function atualizarPainel() {
+    if (listaGlobal.length === 0) return;
+
+    let kmEstimado = (listaGlobal.length * 3).toFixed(1);
+    let tempoEstimado = (listaGlobal.length * 8);
+
+    document.getElementById("painelExtra").innerHTML =
+        "<h3>📊 Resumo da Rota</h3>" +
+        "Total de Entregas: <b>" + listaGlobal.length + "</b><br>" +
+        "KM estimado: <b>" + kmEstimado + " km</b><br>" +
+        "Tempo estimado: <b>" + tempoEstimado + " min</b>";
+}
+
+// 🔄 Otimizar ordem
+function otimizarOrdem() {
+    if (listaGlobal.length === 0) return;
+
+    listaGlobal.sort();
+    indiceAtual = 0;
+    mostrarLista();
+    atualizarPainel();
+}
+
+// 🧹 Limpar
+function limpar() {
+    document.getElementById("enderecos").value = "";
+    document.getElementById("resultado").innerHTML = "";
+    document.getElementById("listaEntregas").innerHTML = "";
+    document.getElementById("painelExtra").innerHTML = "";
+    listaGlobal = [];
+    indiceAtual = 0;
+}
+</script>
+
+</body>
+</html>
